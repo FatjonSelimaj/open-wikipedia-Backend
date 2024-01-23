@@ -1,8 +1,9 @@
 import express, { Express, NextFunction, Request, Response, json } from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, User } from '@prisma/client'
 import bcrypt from 'bcrypt'
+import jwt from 'jsonwebtoken'
 
 dotenv.config()
 
@@ -19,15 +20,93 @@ app.use((req: Request, response: Response, next: NextFunction) => {
     next() // chiamo la next function per passare al prossimo middleware della chain
 })
 
+type TAuthenticatedRequest = Request & { user: Partial<User> }
+
+// middleware per verificare il token JWT
+const verifyTokenMiddleware = async (req: TAuthenticatedRequest, res: Response, next: NextFunction) => {
+    const token = req.header('Authorization')?.split(' ')[1]
+
+    if (!token) {
+        const error = new CustomError('Unauthorized: Token not provided.', 401)
+        return next(error)
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET) as { userId: string }
+        const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
+        if (!user) {
+            const error = new CustomError('Unauthorized: Invalid token.', 401)
+            return next(error)
+        }
+        // Qui posso fare ulteriori controlli sull'utente se necessario
+
+        // Aggiungo l'utente autenticato all'oggetto della request per erre riutilizzato dalla middleware successiva
+        req.user = {
+            id: user.id,
+            userName: user.userName,
+            email: user.email,
+            lastLoginAt: user.lastLoginAt,
+        }
+
+        next()
+    } catch (err) {
+        const error = new CustomError('Unauthorized', 401)
+        return next(error)
+    }
+}
+
 //route
 app.get('/', (req: Request, res: Response) => {
     res.send({ message: 'Hello World!' })
 })
 
-app.get('/users', async (req: Request, res: Response, next: NextFunction) => {
+app.get('/users', verifyTokenMiddleware, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const users = await prisma.user.findMany()
         res.send(users)
+    } catch (err) {
+        next(err)
+    }
+})
+
+app.post('/login', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { identifier, password } = req.body
+
+        // Verifico se esiste l'utente nel database
+        let user: Partial<User> = await prisma.user.findFirst({
+            where: {
+                OR: [{ email: identifier }, { userName: identifier }],
+            },
+        })
+
+        // Se non trovo l'utente nel database ritorno un errore 401
+        if (!user) {
+            const error = new CustomError('Invalid credentials', 401)
+            return next(error)
+        }
+
+        // Confronto la password con quella salvata sul db
+        const passwordMatch = await bcrypt.compare(password, user.password)
+
+        if (!passwordMatch) {
+            const error = new CustomError('Invalid credentials', 401)
+            return next(error)
+        }
+
+        //Genero il token JWT
+        const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET as string, { expiresIn: '365d' })
+        user = await prisma.user.update({
+            where: { id: user.id },
+            data: { lastLoginAt: new Date() },
+            select: {
+                id: true,
+                email: true,
+                userName: true,
+            },
+        })
+
+        return res.send({ user, token })
     } catch (err) {
         next(err)
     }
