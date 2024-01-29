@@ -4,23 +4,17 @@ import dotenv from 'dotenv'
 import { PrismaClient, User } from '@prisma/client'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
+import { createProxyMiddleware } from 'http-proxy-middleware'
+
+type TAuthenticatedRequest = Request & { user: Partial<User> }
 
 dotenv.config()
 
 const PORT = process.env.PORT || 3000
+const BACKEND_SERVICE_URL = process.env.BACKEND_SERVICE_URL
+
 const app: Express = express()
 const prisma = new PrismaClient()
-
-app.use(json())
-app.use(cors())
-
-// middleware di logging
-app.use((req: Request, response: Response, next: NextFunction) => {
-    console.log(`${new Date().toISOString()}: ${req.method} ${req.url}`)
-    next() // chiamo la next function per passare al prossimo middleware della chain
-})
-
-type TAuthenticatedRequest = Request & { user: Partial<User> }
 
 // middleware per verificare il token JWT
 const verifyTokenMiddleware = async (req: TAuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -54,6 +48,34 @@ const verifyTokenMiddleware = async (req: TAuthenticatedRequest, res: Response, 
         return next(error)
     }
 }
+
+// Configuro il proxy per inoltrare le richieste al servizio backend principale
+app.use(
+    '/api',
+    verifyTokenMiddleware,
+    createProxyMiddleware({
+        target: BACKEND_SERVICE_URL,
+        changeOrigin: true,
+        pathRewrite: {
+            '^/api': '', // Rimuovo "/api" dalla richiesta inoltrata
+        },
+        onProxyReq: (proxyReq, req: TAuthenticatedRequest) => {
+            // Posso includere eventuali dati aggiuntivi nella richiesta al backend finale
+            if (req.user) {
+                proxyReq.setHeader('X-User', JSON.stringify(req.user))
+            }
+        },
+    }),
+)
+
+app.use(json())
+app.use(cors())
+
+// middleware di logging
+app.use((req: Request, response: Response, next: NextFunction) => {
+    console.log(`${new Date().toISOString()}: ${req.method} ${req.url}`)
+    next() // chiamo la next function per passare al prossimo middleware della chain
+})
 
 //route
 app.get('/', (req: Request, res: Response) => {
