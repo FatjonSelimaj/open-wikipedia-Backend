@@ -48,6 +48,7 @@ const verifyTokenMiddleware = async (req: TAuthenticatedRequest, res: Response, 
         return next(error)
     }
 }
+app.use(cors())
 
 // Configuro il proxy per inoltrare le richieste al servizio backend principale
 app.use(
@@ -69,7 +70,6 @@ app.use(
 )
 
 app.use(json())
-app.use(cors())
 
 // middleware di logging
 app.use((req: Request, response: Response, next: NextFunction) => {
@@ -82,13 +82,8 @@ app.get('/', (req: Request, res: Response) => {
     res.send({ message: 'Hello World!' })
 })
 
-app.get('/users', verifyTokenMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const users = await prisma.user.findMany()
-        res.send(users)
-    } catch (err) {
-        next(err)
-    }
+app.get('/user', verifyTokenMiddleware, async (req: TAuthenticatedRequest, res) => {
+    res.send(req.user)
 })
 
 app.post('/login', async (req: Request, res: Response, next: NextFunction) => {
