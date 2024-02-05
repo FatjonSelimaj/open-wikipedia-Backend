@@ -88,13 +88,11 @@ app.get('/user', verifyTokenMiddleware, async (req: TAuthenticatedRequest, res) 
 
 app.post('/login', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { identifier, password } = req.body
+        const { email, password } = req.body
 
         // Verifico se esiste l'utente nel database
         let user: Partial<User> = await prisma.user.findFirst({
-            where: {
-                OR: [{ email: identifier }, { userName: identifier }],
-            },
+            where: { email },
         })
 
         // Se non trovo l'utente nel database ritorno un errore 401
@@ -119,7 +117,6 @@ app.post('/login', async (req: Request, res: Response, next: NextFunction) => {
             select: {
                 id: true,
                 email: true,
-                userName: true,
             },
         })
 
@@ -135,9 +132,7 @@ app.post('/register', async (req: Request, res: Response, next: NextFunction) =>
 
         // Verifico se email o userName già esistono
         const existingUser = await prisma.user.findFirst({
-            where: {
-                OR: [{ email }, { userName }],
-            },
+            where: { userName },
         })
         if (existingUser) {
             const error = new CustomError('Email or username already used.', 400)
@@ -163,7 +158,6 @@ app.post('/register', async (req: Request, res: Response, next: NextFunction) =>
             select: {
                 id: true,
                 email: true,
-                userName: true,
             },
         })
 
