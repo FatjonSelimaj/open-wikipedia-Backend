@@ -5,6 +5,8 @@ import { PrismaClient, User } from '@prisma/client'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import { createProxyMiddleware } from 'http-proxy-middleware'
+import { loginSchema } from './validators'
+import { AnyZodObject, ZodError, z } from 'zod'
 
 type TAuthenticatedRequest = Request & { user: Partial<User> }
 
@@ -15,6 +17,8 @@ const BACKEND_SERVICE_URL = process.env.BACKEND_SERVICE_URL
 
 const app: Express = express()
 const prisma = new PrismaClient()
+
+app.use(cors());
 
 // middleware per verificare il token JWT
 const verifyTokenMiddleware = async (req: TAuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -48,7 +52,6 @@ const verifyTokenMiddleware = async (req: TAuthenticatedRequest, res: Response, 
         return next(error)
     }
 }
-app.use(cors())
 
 // Configuro il proxy per inoltrare le richieste al servizio backend principale
 app.use(
@@ -83,15 +86,18 @@ app.get('/', (req: Request, res: Response) => {
 })
 
 app.get('/user', verifyTokenMiddleware, async (req: TAuthenticatedRequest, res) => {
-    res.send(req.user)
+    res.send({
+        id: req.user.id,
+        email: req.user.email
+    })
 })
 
 app.post('/login', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { email, password } = req.body
-
+        
         // Verifico se esiste l'utente nel database
-        let user: Partial<User> = await prisma.user.findFirst({
+        let user: Partial<User> = await prisma.user.findUnique({
             where: { email },
         })
 
@@ -120,7 +126,7 @@ app.post('/login', async (req: Request, res: Response, next: NextFunction) => {
             },
         })
 
-        return res.send({ user, token })
+        return res.send({ ...user, token })
     } catch (err) {
         next(err)
     }
