@@ -1,4 +1,3 @@
-// services/wikipediaService.ts
 import axios from 'axios';
 
 export const searchWikipedia = async (query: string, lang: string = 'en') => {

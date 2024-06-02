@@ -18,7 +18,6 @@ const authenticateToken = async (req: AuthenticatedRequest, res: Response, next:
   jwt.verify(token, SECRET_KEY, async (err: any, user: any) => {
     if (err) return res.sendStatus(403);
 
-    // Check if token corresponds to the logged-in user
     const userData = await prisma.user.findUnique({ where: { id: user.userId } });
     if (!userData) return res.sendStatus(403);
 

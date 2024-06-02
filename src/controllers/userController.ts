@@ -10,8 +10,18 @@ interface AuthenticatedRequest extends Request {
 const prisma = new PrismaClient();
 const SECRET_KEY = process.env.SECRET_KEY || 'default_secret_key';
 
+const passwordValidation = (password: string) => {
+  const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  return passwordRegex.test(password);
+};
+
 const register = async (req: Request, res: Response) => {
   const { username, email, password } = req.body;
+
+  if (!passwordValidation(password)) {
+    return res.status(400).json({ error: 'Password Debole, deve contenere almeno 8 caratteri, una lettera maiuscola, un numero e un carattere speciale.' });
+  }
+
   const hashedPassword = await bcrypt.hash(password, 10);
 
   try {
@@ -102,7 +112,7 @@ const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
 
 const getUserProfile = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = req.userId; // Assumendo che l'ID utente sia memorizzato in req.userId dal middleware di autenticazione
+    const userId = req.userId;
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -115,4 +125,31 @@ const getUserProfile = async (req: AuthenticatedRequest, res: Response) => {
   }
 };
 
-export { register, login, updateUser, deleteUser, getUserProfile };
+const changePassword = async (req: AuthenticatedRequest, res: Response) => {
+  const { oldPassword, newPassword } = req.body;
+
+  if (!passwordValidation(newPassword)) {
+    return res.status(400).json({ error: 'Password Debole, deve contenere almeno 8 caratteri, una lettera maiuscola, un numero e un carattere speciale.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+
+    if (!user || !await bcrypt.compare(oldPassword, user.password)) {
+      return res.status(401).json({ message: 'Old password is incorrect' });
+    }
+
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { password: hashedNewPassword }
+    });
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    res.status(400).json({ error: 'Password update failed', details: error.message });
+  }
+};
+
+export { register, login, updateUser, deleteUser, getUserProfile, changePassword };
