@@ -14,24 +14,27 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getWikipediaArticle = exports.searchWikipedia = void 0;
 const axios_1 = __importDefault(require("axios"));
-const searchWikipedia = (query) => __awaiter(void 0, void 0, void 0, function* () {
-    const response = yield axios_1.default.get('https://en.wikipedia.org/w/api.php', {
+const searchWikipedia = (query, lang = 'en') => __awaiter(void 0, void 0, void 0, function* () {
+    const response = yield axios_1.default.get(`https://${lang}.wikipedia.org/w/api.php`, {
         params: {
             action: 'query',
+            format: 'json',
             list: 'search',
             srsearch: query,
-            format: 'json'
+            origin: '*'
         }
     });
     return response.data.query.search;
 });
 exports.searchWikipedia = searchWikipedia;
-const getWikipediaArticle = (title) => __awaiter(void 0, void 0, void 0, function* () {
-    const response = yield axios_1.default.get('https://en.wikipedia.org/w/api.php', {
+const getWikipediaArticle = (title, lang = 'en') => __awaiter(void 0, void 0, void 0, function* () {
+    const response = yield axios_1.default.get(`https://${lang}.wikipedia.org/w/api.php`, {
         params: {
             action: 'parse',
+            format: 'json',
             page: title,
-            format: 'json'
+            prop: 'text',
+            origin: '*'
         }
     });
     return response.data.parse;

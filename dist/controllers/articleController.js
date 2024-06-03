@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.articleOfTheDay = exports.deleteArticle = exports.updateArticle = exports.listArticles = exports.overwriteArticle = exports.download = exports.search = void 0;
+exports.getRandomArticle = exports.checkArticleExistence = exports.deleteArticle = exports.updateArticle = exports.listArticles = exports.download = exports.search = void 0;
 const client_1 = require("@prisma/client");
 const wikipediaService_1 = require("../services/wikipediaService");
 const prisma = new client_1.PrismaClient();
@@ -28,47 +28,77 @@ const search = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.search = search;
 const download = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { title } = req.body;
+    const { title, lang, overwrite } = req.body;
     if (!req.userId) {
         return res.status(401).json({ error: 'User ID is required' });
     }
+    if (!title || !lang) {
+        return res.status(400).json({ error: 'Title and language are required' });
+    }
     try {
-        const articleData = yield (0, wikipediaService_1.getWikipediaArticle)(title);
-        const newArticle = yield prisma.article.create({
-            data: {
-                title: articleData.title,
-                content: articleData.text['*'],
+        const articleData = yield (0, wikipediaService_1.getWikipediaArticle)(title, lang);
+        if (!articleData) {
+            return res.status(400).json({ error: 'Article not found on Wikipedia' });
+        }
+        const existingArticle = yield prisma.article.findFirst({
+            where: {
+                title,
                 authorId: req.userId,
             },
         });
-        res.status(201).json(newArticle);
+        if (existingArticle && !overwrite) {
+            return res.status(409).json({ error: 'Article already exists' });
+        }
+        if (existingArticle) {
+            // Overwrite the existing article
+            const updatedArticle = yield prisma.article.update({
+                where: { id: existingArticle.id },
+                data: {
+                    title: articleData.title,
+                    content: articleData.text['*'],
+                },
+            });
+            return res.status(200).json(updatedArticle);
+        }
+        else {
+            // Create a new article if it doesn't exist
+            const newArticle = yield prisma.article.create({
+                data: {
+                    title: articleData.title,
+                    content: articleData.text['*'],
+                    authorId: req.userId,
+                },
+            });
+            return res.status(201).json(newArticle);
+        }
     }
     catch (error) {
         res.status(400).json({ error: 'Article download failed', details: error.message });
     }
 });
 exports.download = download;
-const overwriteArticle = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { id, title } = req.body;
+const checkArticleExistence = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { title } = req.body;
     if (!req.userId) {
         return res.status(401).json({ error: 'User ID is required' });
     }
+    if (!title) {
+        return res.status(400).json({ error: 'Title is required' });
+    }
     try {
-        const articleData = yield (0, wikipediaService_1.getWikipediaArticle)(title);
-        const updatedArticle = yield prisma.article.update({
-            where: { id },
-            data: {
-                title: articleData.title,
-                content: articleData.text['*'],
+        const existingArticle = yield prisma.article.findFirst({
+            where: {
+                title,
+                authorId: req.userId,
             },
         });
-        res.status(200).json(updatedArticle);
+        res.json({ exists: !!existingArticle });
     }
     catch (error) {
-        res.status(400).json({ error: 'Article overwrite failed', details: error.message });
+        res.status(500).json({ error: 'Failed to check article existence', details: error.message });
     }
 });
-exports.overwriteArticle = overwriteArticle;
+exports.checkArticleExistence = checkArticleExistence;
 const listArticles = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     if (!req.userId) {
         return res.status(401).json({ error: 'User ID is required' });
@@ -128,3 +158,22 @@ const deleteArticle = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.deleteArticle = deleteArticle;
+const getRandomArticle = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!req.userId) {
+        return res.status(401).json({ error: 'User ID is required' });
+    }
+    try {
+        const articles = yield prisma.article.findMany({
+            where: { authorId: req.userId },
+        });
+        if (articles.length === 0) {
+            return res.status(200).json({ message: 'No articles found' });
+        }
+        const randomArticle = articles[Math.floor(Math.random() * articles.length)];
+        res.json(randomArticle);
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Failed to fetch article of the day', details: error.message });
+    }
+});
+exports.getRandomArticle = getRandomArticle;

@@ -22,9 +22,22 @@ const register = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Password Debole, deve contenere almeno 8 caratteri, una lettera maiuscola, un numero e un carattere speciale.' });
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
-
   try {
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: email },
+          { username: username },
+        ],
+      },
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email o Username già in uso.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const newUser = await prisma.user.create({
       data: {
         username,
@@ -32,9 +45,10 @@ const register = async (req: Request, res: Response) => {
         password: hashedPassword,
       },
     });
+
     res.status(201).json({ message: 'User registered successfully' });
-  } catch (error) {
-    res.status(400).json({ error: 'User registration failed', details: error.message });
+  } catch (error: any) {
+    res.status(500).json({ error: 'User registration failed', details: error.message });
   }
 };
 
@@ -59,8 +73,8 @@ const login = async (req: Request, res: Response) => {
         email: user.email,
       }
     });
-  } catch (error) {
-    res.status(400).json({ error: 'Login failed', details: error.message });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Login failed', details: error.message });
   }
 };
 
@@ -87,8 +101,8 @@ const updateUser = async (req: AuthenticatedRequest, res: Response) => {
     });
 
     res.json({ message: 'User updated successfully', user: updatedUser });
-  } catch (error) {
-    res.status(400).json({ error: 'User update failed', details: error.message });
+  } catch (error: any) {
+    res.status(500).json({ error: 'User update failed', details: error.message });
   }
 };
 
@@ -105,8 +119,8 @@ const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
     await prisma.user.delete({ where: { id } });
 
     res.json({ message: 'User and associated articles deleted successfully' });
-  } catch (error) {
-    res.status(400).json({ error: 'User deletion failed', details: error.message });
+  } catch (error: any) {
+    res.status(500).json({ error: 'User deletion failed', details: error.message });
   }
 };
 
@@ -120,7 +134,7 @@ const getUserProfile = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
     res.json(user);
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({ message: 'Internal server error', details: error.message });
   }
 };
@@ -147,8 +161,8 @@ const changePassword = async (req: AuthenticatedRequest, res: Response) => {
     });
 
     res.json({ message: 'Password updated successfully' });
-  } catch (error) {
-    res.status(400).json({ error: 'Password update failed', details: error.message });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Password update failed', details: error.message });
   }
 };
 

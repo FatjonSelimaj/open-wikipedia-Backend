@@ -25,7 +25,6 @@ const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, 
     jsonwebtoken_1.default.verify(token, SECRET_KEY, (err, user) => __awaiter(void 0, void 0, void 0, function* () {
         if (err)
             return res.sendStatus(403);
-        // Check if token corresponds to the logged-in user
         const userData = yield prisma.user.findUnique({ where: { id: user.userId } });
         if (!userData)
             return res.sendStatus(403);
