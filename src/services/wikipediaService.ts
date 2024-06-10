@@ -13,15 +13,24 @@ export const searchWikipedia = async (query: string, lang: string = 'en') => {
   return response.data.query.search;
 };
 
-export const getWikipediaArticle = async (title: string, lang: string = 'en') => {
+export const getWikipediaArticle = async (title, lang) => {
   const response = await axios.get(`https://${lang}.wikipedia.org/w/api.php`, {
     params: {
       action: 'parse',
-      format: 'json',
       page: title,
-      prop: 'text',
-      origin: '*'
-    }
+      format: 'json',
+      origin: '*',
+    },
   });
-  return response.data.parse;
+
+  const articleData = response.data.parse;
+
+  // Convert internal Wikipedia links to local links
+  const content = articleData.text['*'].replace(/href="\/wiki\/([^"]+)"/g, 'href="/articles/$1"');
+
+  return {
+    title: articleData.title,
+    content,
+  };
 };
+

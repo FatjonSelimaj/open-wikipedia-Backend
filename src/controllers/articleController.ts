@@ -1,13 +1,21 @@
-import { Request, Response } from 'express';
+import { Request, Response, json } from 'express';
 import { PrismaClient } from '@prisma/client';
+import multer from 'multer';
 import { searchWikipedia, getWikipediaArticle } from '../services/wikipediaService';
+import path from 'path';
+
+const upload = multer({ dest: 'uploads/' });
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
+  file?: multer.File;
 }
 
 const prisma = new PrismaClient();
 
+/**
+ * Search articles on Wikipedia.
+ */
 const search = async (req: AuthenticatedRequest, res: Response) => {
   const { query } = req.query;
 
@@ -19,10 +27,13 @@ const search = async (req: AuthenticatedRequest, res: Response) => {
     const results = await searchWikipedia(query as string);
     res.json(results);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to search Wikipedia', details: error.message });
+    res.status(500).json({ error: 'Failed to search Wikipedia', details: (error as Error).message });
   }
 };
 
+/**
+ * Download and save a Wikipedia article.
+ */
 const download = async (req: AuthenticatedRequest, res: Response) => {
   const { title, lang, overwrite } = req.body;
 
@@ -42,10 +53,7 @@ const download = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const existingArticle = await prisma.article.findFirst({
-      where: {
-        title,
-        authorId: req.userId,
-      },
+      where: { title, authorId: req.userId },
     });
 
     if (existingArticle && !overwrite) {
@@ -53,31 +61,32 @@ const download = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     if (existingArticle) {
-      // Overwrite the existing article
       const updatedArticle = await prisma.article.update({
         where: { id: existingArticle.id },
         data: {
           title: articleData.title,
-          content: articleData.text['*'],
+          content: articleData.content,
         },
       });
       return res.status(200).json(updatedArticle);
     } else {
-      // Create a new article if it doesn't exist
       const newArticle = await prisma.article.create({
         data: {
           title: articleData.title,
-          content: articleData.text['*'],
+          content: articleData.content,
           authorId: req.userId,
         },
       });
       return res.status(201).json(newArticle);
     }
   } catch (error) {
-    res.status(400).json({ error: 'Article download failed', details: error.message });
+    res.status(400).json({ error: 'Article download failed', details: (error as Error).message });
   }
 };
 
+/**
+ * Check if an article already exists for the authenticated user.
+ */
 const checkArticleExistence = async (req: AuthenticatedRequest, res: Response) => {
   const { title } = req.body;
 
@@ -91,18 +100,18 @@ const checkArticleExistence = async (req: AuthenticatedRequest, res: Response) =
 
   try {
     const existingArticle = await prisma.article.findFirst({
-      where: {
-        title,
-        authorId: req.userId,
-      },
+      where: { title, authorId: req.userId },
     });
 
     res.json({ exists: !!existingArticle });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to check article existence', details: error.message });
+    res.status(500).json({ error: 'Failed to check article existence', details: (error as Error).message });
   }
 };
 
+/**
+ * List all articles for the authenticated user.
+ */
 const listArticles = async (req: AuthenticatedRequest, res: Response) => {
   if (!req.userId) {
     return res.status(401).json({ error: 'User ID is required' });
@@ -114,10 +123,42 @@ const listArticles = async (req: AuthenticatedRequest, res: Response) => {
     });
     res.json(articles);
   } catch (error) {
-    res.status(400).json({ error: 'Failed to list articles', details: error.message });
+    res.status(400).json({ error: 'Failed to list articles', details: (error as Error).message });
   }
 };
 
+/**
+ * Get an article by ID.
+ */
+const getArticleById = async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+
+  if (!req.userId) {
+    return res.status(401).json({ error: 'User ID is required' });
+  }
+
+  try {
+    const article = await prisma.article.findUnique({
+      where: { id },
+    });
+
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    if (article.authorId !== req.userId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    res.json(article);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch article', details: (error as Error).message });
+  }
+};
+
+/**
+ * Update an existing article.
+ */
 const updateArticle = async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const { title, content } = req.body;
@@ -135,18 +176,32 @@ const updateArticle = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
+    // Save the edit history
+    await prisma.articleHistory.create({
+      data: {
+        articleId: article.id,
+        title: article.title,
+        content: article.content,
+        authorId: req.userId!,
+      },
+    });
+
     const updatedArticle = await prisma.article.update({
       where: { id },
       data: { title, content },
     });
     res.json(updatedArticle);
   } catch (error) {
-    res.status(400).json({ error: 'Failed to update article', details: error.message });
+    res.status(400).json({ error: 'Failed to update article', details: (error as Error).message });
   }
 };
 
+/**
+ * Delete an article.
+ */
 const deleteArticle = async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
+  console.log(`Request to delete article with ID: ${id}`);
 
   if (!req.userId) {
     return res.status(401).json({ error: 'User ID is required' });
@@ -157,17 +212,27 @@ const deleteArticle = async (req: AuthenticatedRequest, res: Response) => {
       where: { id },
     });
 
-    if (!article || article.authorId !== req.userId) {
+    if (!article) {
+      console.log(`Article with ID: ${id} not found`);
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    if (article.authorId !== req.userId) {
+      console.log(`User ${req.userId} is not authorized to delete article with ID: ${id}`);
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
     await prisma.article.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
-    res.status(400).json({ error: 'Failed to delete article', details: error.message });
+    console.error(`Failed to delete article with ID: ${id}`, error);
+    res.status(400).json({ error: 'Failed to delete article', details: (error as Error).message });
   }
 };
 
+/**
+ * Get a random article for the authenticated user.
+ */
 const getRandomArticle = async (req: AuthenticatedRequest, res: Response) => {
   if (!req.userId) {
     return res.status(401).json({ error: 'User ID is required' });
@@ -185,8 +250,30 @@ const getRandomArticle = async (req: AuthenticatedRequest, res: Response) => {
     const randomArticle = articles[Math.floor(Math.random() * articles.length)];
     res.json(randomArticle);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch article of the day', details: error.message });
+    res.status(500).json({ error: 'Failed to fetch article of the day', details: (error as Error).message });
   }
 };
 
-export { search, download, listArticles, updateArticle, deleteArticle, checkArticleExistence, getRandomArticle };
+/**
+ * Get the history of an article by article ID.
+ */
+const getArticleHistory = async (req: AuthenticatedRequest, res: Response) => {
+  const { articleId } = req.params;
+
+  if (!req.userId) {
+    return res.status(401).json({ error: 'User ID is required' });
+  }
+
+  try {
+    const history = await prisma.articleHistory.findMany({
+      where: { articleId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch article history', details: (error as Error).message });
+  }
+};
+
+export { getArticleHistory, search, download, listArticles, getArticleById, updateArticle, deleteArticle, checkArticleExistence, getRandomArticle };

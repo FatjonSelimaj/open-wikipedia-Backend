@@ -15,8 +15,17 @@ const passwordValidation = (password: string) => {
   return passwordRegex.test(password);
 };
 
+const emailValidation = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 const register = async (req: Request, res: Response) => {
   const { username, email, password } = req.body;
+
+  if (!emailValidation(email)) {
+    return res.status(400).json({ error: 'Email non valida. Deve essere nel formato example@mail.com.' });
+  }
 
   if (!passwordValidation(password)) {
     return res.status(400).json({ error: 'Password Debole, deve contenere almeno 8 caratteri, una lettera maiuscola, un numero e un carattere speciale.' });
@@ -120,9 +129,11 @@ const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
 
     res.json({ message: 'User and associated articles deleted successfully' });
   } catch (error: any) {
+    console.error('Error deleting user:', error);
     res.status(500).json({ error: 'User deletion failed', details: error.message });
   }
 };
+
 
 const getUserProfile = async (req: AuthenticatedRequest, res: Response) => {
   try {

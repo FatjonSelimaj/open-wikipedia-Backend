@@ -13,16 +13,30 @@ const authenticateToken = async (req: AuthenticatedRequest, res: Response, next:
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  if (!token) return res.sendStatus(401);
+  if (!token) {
+    console.log('Token missing');
+    return res.sendStatus(401);
+  }
 
   jwt.verify(token, SECRET_KEY, async (err: any, user: any) => {
-    if (err) return res.sendStatus(403);
+    if (err) {
+      console.log('Invalid token');
+      return res.sendStatus(403);
+    }
 
-    const userData = await prisma.user.findUnique({ where: { id: user.userId } });
-    if (!userData) return res.sendStatus(403);
+    try {
+      const userData = await prisma.user.findUnique({ where: { id: user.userId } });
+      if (!userData) {
+        console.log('User not found');
+        return res.sendStatus(403);
+      }
 
-    req.userId = user.userId;
-    next();
+      req.userId = user.userId;
+      next();
+    } catch (error) {
+      console.log('Error fetching user data:', error);
+      return res.sendStatus(500);
+    }
   });
 };
 
