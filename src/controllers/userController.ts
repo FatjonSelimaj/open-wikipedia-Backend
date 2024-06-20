@@ -134,7 +134,6 @@ const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
   }
 };
 
-
 const getUserProfile = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.userId;

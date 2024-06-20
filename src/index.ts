@@ -21,7 +21,7 @@ app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
 app.use(express.json());
 
-app.use('/api', userRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/articles', articleRoutes);
 
 app.listen(PORT, () => {

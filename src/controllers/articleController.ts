@@ -2,7 +2,6 @@ import { Request, Response, json } from 'express';
 import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import { searchWikipedia, getWikipediaArticle } from '../services/wikipediaService';
-import path from 'path';
 
 const upload = multer({ dest: 'uploads/' });
 
@@ -77,10 +76,12 @@ const download = async (req: AuthenticatedRequest, res: Response) => {
           authorId: req.userId,
         },
       });
+      console.log('New article created successfully', newArticle);
       return res.status(201).json(newArticle);
     }
   } catch (error) {
-    res.status(400).json({ error: 'Article download failed', details: (error as Error).message });
+    console.error('Error downloading article:', error);
+    res.status(500).json({ error: 'Article download failed', details: error.message });
   }
 };
 
@@ -201,7 +202,6 @@ const updateArticle = async (req: AuthenticatedRequest, res: Response) => {
  */
 const deleteArticle = async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
-  console.log(`Request to delete article with ID: ${id}`);
 
   if (!req.userId) {
     return res.status(401).json({ error: 'User ID is required' });
@@ -213,12 +213,10 @@ const deleteArticle = async (req: AuthenticatedRequest, res: Response) => {
     });
 
     if (!article) {
-      console.log(`Article with ID: ${id} not found`);
       return res.status(404).json({ error: 'Article not found' });
     }
 
     if (article.authorId !== req.userId) {
-      console.log(`User ${req.userId} is not authorized to delete article with ID: ${id}`);
       return res.status(403).json({ error: 'Unauthorized' });
     }
 

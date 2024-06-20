@@ -1,5 +1,15 @@
 import { Router } from 'express';
-import { search, download, listArticles, getArticleById, updateArticle, deleteArticle, checkArticleExistence, getRandomArticle, getArticleHistory } from '../controllers/articleController';
+import {
+  search,
+  download,
+  listArticles,
+  getArticleById,
+  updateArticle,
+  deleteArticle,
+  checkArticleExistence,
+  getRandomArticle,
+  getArticleHistory
+} from '../controllers/articleController';
 import { authenticateToken } from '../middleware/auth';
 import multer from 'multer';
 
